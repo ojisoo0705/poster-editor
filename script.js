@@ -143,6 +143,7 @@ const exportOverlay = document.getElementById('export-overlay');
 const canvas = document.getElementById('poster-canvas');
 
 let totalBlocks = 0;
+let exportCounter = parseInt(localStorage.getItem('identio_export_counter') || '0', 10);
 
 // ── Matter.js Modules ─────────────────────────────────────────
 const { Engine, World, Bodies, Body, Composite, Runner, Events, Mouse, MouseConstraint } = Matter;
@@ -1008,8 +1009,14 @@ async function exportPDF() {
     const imgData = capturedCanvas.toDataURL('image/jpeg', 0.95);
     pdf.addImage(imgData, 'JPEG', 0, 0, a3Width, a3Height);
 
-    const timestamp = new Date().toISOString().slice(0, 10);
-    pdf.save(`IDENTIO_ATLAS_poster_${timestamp}.pdf`);
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const seq = String(exportCounter).padStart(2, '0');
+    pdf.save(`${yy}${mm}${dd}_identio_poster_${seq}.pdf`);
+    exportCounter++;
+    localStorage.setItem('identio_export_counter', String(exportCounter));
 
   } catch (err) {
     console.error('PDF export failed:', err);
@@ -1061,10 +1068,16 @@ async function exportJPG() {
 
     const imgData = capturedCanvas.toDataURL('image/jpeg', 0.95);
     const link = document.createElement('a');
-    const timestamp = new Date().toISOString().slice(0, 10);
-    link.download = `IDENTIO_ATLAS_poster_${timestamp}.jpg`;
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const seq = String(exportCounter).padStart(2, '0');
+    link.download = `${yy}${mm}${dd}_identio_poster_${seq}.jpg`;
     link.href = imgData;
     link.click();
+    exportCounter++;
+    localStorage.setItem('identio_export_counter', String(exportCounter));
 
   } catch (err) {
     console.error('JPG export failed:', err);
