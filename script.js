@@ -211,9 +211,9 @@ function initPhysics() {
   blocksLayer.appendChild(pCanvas);
   pCtx = pCanvas.getContext('2d');
 
-  // Create Matter Engine — Higher gravity for faster, snappier drops
+  // Create Matter Engine
   engine = Engine.create({
-    gravity: { y: 1.8, x: 0 }
+    gravity: { y: 1.0, x: 0 }
   });
   world = engine.world;
 
@@ -758,7 +758,7 @@ function createFallingBlocks(text) {
     const blockBody = Bodies.rectangle(startX, startY, sizePx * 0.52, sizePx * 0.52, {
       restitution: 0.4,  // Solid wobbly bounce
       friction: 0.15,    // Normal friction to stack stably
-      frictionAir: 0.008,
+      frictionAir: 0.015,
       angle: (Math.random() - 0.5) * 0.8,
       plugin: {
         text: letter,
@@ -778,10 +778,10 @@ function createFallingBlocks(text) {
 
     // Add initial downward/horizontal momentum
     Body.setVelocity(blockBody, {
-      x: (Math.random() - 0.5) * 1.8,
-      y: 4.0 + Math.random() * 3
+      x: (Math.random() - 0.5) * 1.2,
+      y: 2.5 + Math.random() * 2
     });
-    Body.setAngularVelocity(blockBody, (Math.random() - 0.5) * 0.15);
+    Body.setAngularVelocity(blockBody, (Math.random() - 0.5) * 0.1);
 
     Composite.add(world, blockBody);
     totalBlocks++;
