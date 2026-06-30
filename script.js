@@ -156,6 +156,7 @@ function init() {
   renderProjectList();
   initPhysics();
   bindEvents();
+  initMobileColorModal();
 
   // Apply initial background color and styles
   updatePosterBackground('#17171b');
@@ -168,6 +169,9 @@ function init() {
       console.warn("Failed to load Whoami font in JS:", err);
     });
   }
+
+  // Mobile viewport resize handler (address bar show/hide)
+  handleMobileViewportResize();
 }
 
 function renderProjectList() {
@@ -207,9 +211,9 @@ function initPhysics() {
   blocksLayer.appendChild(pCanvas);
   pCtx = pCanvas.getContext('2d');
 
-  // Create Matter Engine
+  // Create Matter Engine — Higher gravity for faster, snappier drops
   engine = Engine.create({
-    gravity: { y: 1.0, x: 0 }
+    gravity: { y: 1.8, x: 0 }
   });
   world = engine.world;
 
@@ -754,7 +758,7 @@ function createFallingBlocks(text) {
     const blockBody = Bodies.rectangle(startX, startY, sizePx * 0.52, sizePx * 0.52, {
       restitution: 0.4,  // Solid wobbly bounce
       friction: 0.15,    // Normal friction to stack stably
-      frictionAir: 0.015,
+      frictionAir: 0.008,
       angle: (Math.random() - 0.5) * 0.8,
       plugin: {
         text: letter,
@@ -774,10 +778,10 @@ function createFallingBlocks(text) {
 
     // Add initial downward/horizontal momentum
     Body.setVelocity(blockBody, {
-      x: (Math.random() - 0.5) * 1.2,
-      y: 2.5 + Math.random() * 2
+      x: (Math.random() - 0.5) * 1.8,
+      y: 4.0 + Math.random() * 3
     });
-    Body.setAngularVelocity(blockBody, (Math.random() - 0.5) * 0.1);
+    Body.setAngularVelocity(blockBody, (Math.random() - 0.5) * 0.15);
 
     Composite.add(world, blockBody);
     totalBlocks++;
@@ -1069,6 +1073,224 @@ async function exportJPG() {
     canvas.classList.remove('is-exporting');
     exportOverlay.classList.remove('is-visible');
   }
+}
+
+// ── Mobile Detection Helper ──────────────────────────────────
+function isMobileView() {
+  return window.innerWidth <= 700;
+}
+
+// ── Mobile Viewport Resize Handler ───────────────────────────
+function handleMobileViewportResize() {
+  // Use visualViewport API to handle address bar show/hide on mobile
+  if (window.visualViewport) {
+    let resizeTimer;
+    window.visualViewport.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        resizePhysicsCanvas();
+      }, 100);
+    });
+  }
+
+  // Also handle orientation changes
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      resizePhysicsCanvas();
+    }, 300);
+  });
+}
+
+// ── Mobile Color Picker Modal ────────────────────────────────
+function initMobileColorModal() {
+  // Create the modal overlay element
+  const overlay = document.createElement('div');
+  overlay.className = 'mobile-color-modal-overlay';
+  overlay.id = 'mobile-color-modal-overlay';
+
+  const BG_SWATCHES = [
+    { color: '#17171b', title: 'Default Dark' },
+    { color: '#c9b8e7', title: 'Pastel Lavender' },
+    { color: '#7d9fce', title: 'Slate Blue' },
+    { color: '#eee5e0', title: 'Warm Stone' },
+  ];
+
+  // Determine current background
+  const currentBg = getComputedStyle(canvas).backgroundColor;
+  const currentHex = rgbToHexSimple(currentBg);
+
+  let swatchesHtml = BG_SWATCHES.map(s => {
+    const isActive = s.color.toLowerCase() === currentHex.toLowerCase() ? ' active' : '';
+    return `<button class="modal-swatch${isActive}" data-color="${s.color}" style="background-color: ${s.color};" title="${s.title}"></button>`;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div class="mobile-color-modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Background Color</div>
+      <div class="modal-swatches">
+        ${swatchesHtml}
+      </div>
+      <div class="modal-hex-input-wrapper">
+        <div class="modal-hex-preview" id="modal-hex-preview" style="background-color: ${currentHex}"></div>
+        <input type="text" class="modal-hex-input" id="modal-hex-input" placeholder="#17171B" maxlength="7" value="${currentHex.toUpperCase()}">
+      </div>
+      <button class="modal-close-btn" id="modal-close-btn">Done</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Bind events
+  const modal = overlay.querySelector('.mobile-color-modal');
+  const closeBtn = document.getElementById('modal-close-btn');
+  const modalHexInput = document.getElementById('modal-hex-input');
+  const modalPreview = document.getElementById('modal-hex-preview');
+  const modalSwatches = overlay.querySelectorAll('.modal-swatch');
+
+  // Close on overlay background click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      closeMobileColorModal();
+    }
+  });
+
+  // Close button
+  closeBtn.addEventListener('click', () => {
+    closeMobileColorModal();
+  });
+
+  // Swatch clicks
+  modalSwatches.forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      modalSwatches.forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      const color = swatch.dataset.color;
+      updatePosterBackground(color);
+      if (modalHexInput) modalHexInput.value = color.toUpperCase();
+      if (modalPreview) modalPreview.style.backgroundColor = color;
+
+      // Also update sidebar swatches
+      syncSidebarSwatches(color);
+    });
+  });
+
+  // HEX input
+  if (modalHexInput) {
+    modalHexInput.addEventListener('input', (e) => {
+      let val = e.target.value.replace(/[^0-9a-fA-F#]/g, '');
+      if (!val.startsWith('#')) val = '#' + val;
+      e.target.value = val;
+      const cleanVal = val.replace('#', '');
+      if (cleanVal.length === 3 || cleanVal.length === 6) {
+        const hex = cleanVal.length === 3
+          ? '#' + cleanVal.split('').map(x => x + x).join('')
+          : '#' + cleanVal;
+        updatePosterBackground(hex);
+        if (modalPreview) modalPreview.style.backgroundColor = hex;
+        modalSwatches.forEach(s => s.classList.remove('active'));
+        syncSidebarSwatches(hex);
+      }
+    });
+
+    modalHexInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        modalHexInput.blur();
+      }
+    });
+  }
+
+  // Override the gradient/color picker trigger on mobile
+  const bgPickerContainer = document.getElementById('custom-picker-trigger');
+  if (bgPickerContainer) {
+    bgPickerContainer.addEventListener('click', (e) => {
+      if (isMobileView()) {
+        e.stopPropagation();
+        e.preventDefault();
+        openMobileColorModal();
+      }
+    }, true); // Use capture phase to fire before existing handler
+  }
+
+  // Also intercept background swatch clicks on mobile to update modal state
+  const sidebarSwatches = document.querySelectorAll('.sidebar .bg-swatch');
+  sidebarSwatches.forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      if (isMobileView()) {
+        const color = swatch.dataset.color;
+        updateModalState(color);
+      }
+    });
+  });
+}
+
+function openMobileColorModal() {
+  const overlay = document.getElementById('mobile-color-modal-overlay');
+  if (!overlay) return;
+
+  // Update modal state to match current background
+  const currentBg = getComputedStyle(canvas).backgroundColor;
+  const hex = rgbToHexSimple(currentBg);
+  updateModalState(hex);
+
+  overlay.classList.add('is-open');
+}
+
+function closeMobileColorModal() {
+  const overlay = document.getElementById('mobile-color-modal-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('is-open');
+}
+
+function updateModalState(hex) {
+  const overlay = document.getElementById('mobile-color-modal-overlay');
+  if (!overlay) return;
+
+  const modalHexInput = document.getElementById('modal-hex-input');
+  const modalPreview = document.getElementById('modal-hex-preview');
+  const modalSwatches = overlay.querySelectorAll('.modal-swatch');
+
+  if (modalHexInput) modalHexInput.value = hex.toUpperCase();
+  if (modalPreview) modalPreview.style.backgroundColor = hex;
+
+  modalSwatches.forEach(s => {
+    if (s.dataset.color.toLowerCase() === hex.toLowerCase()) {
+      s.classList.add('active');
+    } else {
+      s.classList.remove('active');
+    }
+  });
+}
+
+function syncSidebarSwatches(hex) {
+  const sidebarSwatches = document.querySelectorAll('.sidebar .bg-swatch');
+  const customPicker = document.getElementById('custom-picker-trigger');
+  let matched = false;
+
+  sidebarSwatches.forEach(s => {
+    s.classList.remove('active');
+    if (s.dataset.color && s.dataset.color.toLowerCase() === hex.toLowerCase()) {
+      s.classList.add('active');
+      matched = true;
+    }
+  });
+
+  if (!matched && customPicker) {
+    customPicker.classList.add('active');
+  } else if (customPicker) {
+    customPicker.classList.remove('active');
+  }
+}
+
+// Simple RGB string to hex converter
+function rgbToHexSimple(rgbStr) {
+  if (rgbStr.startsWith('#')) return rgbStr;
+  const match = rgbStr.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)$/);
+  if (!match) return '#17171b';
+  const r = parseInt(match[1]).toString(16).padStart(2, '0');
+  const g = parseInt(match[2]).toString(16).padStart(2, '0');
+  const b = parseInt(match[3]).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
 }
 
 // ── Start ────────────────────────────────────────────────────
